@@ -284,7 +284,6 @@ function clearSelection() {
   submitBtn.disabled = true;
   closeResults();
   hideSearchError();
-  hideMessage();
 }
 
 function highlightResult(index) {
@@ -477,6 +476,9 @@ searchInput.addEventListener('blur', () => {
     }
   }, 150);
 });
-clearSelectionBtn.addEventListener('click', clearSelection);
+clearSelectionBtn.addEventListener('click', () => {
+  hideMessage();
+  clearSelection();
+});
 form.addEventListener('submit', handleSubmit);
 document.addEventListener('click', handleClickOutside);
