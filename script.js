@@ -415,7 +415,7 @@ async function handleSubmit(e) {
     return;
   }
 
-  if (APPS_SCRIPT_URL === 'COLOQUE_SUA_URL_DO_APPS_SCRIPT_AQUI') {
+  if (APPS_SCRIPT_URL === 'https://script.google.com/macros/s/AKfycbxtP11kaOMEovJhB-6NTSCwDi10dp_iF8boZ307BKcJuLx62LD6NBXMmNMFP2KCRCLR/exec') {
     showToast('Configure a URL do Google Apps Script no arquivo script.js antes de enviar.', 'error', SUCCESS_MESSAGE_MS);
     return;
   }
