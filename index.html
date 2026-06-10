@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Indicação de Leitura — Delulu Literário</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;0,7..72,700;1,7..72,400&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="page">
+    <header class="header">
+      <div class="header__badge">Clube do Livro</div>
+      <h1 class="header__title">Indicação de Leitura — Delulu Literário</h1>
+      <p class="header__subtitle">Compartilhe sua próxima leitura favorita com o clube.</p>
+    </header>
+
+    <main class="main">
+      <form id="recommendation-form" class="form" novalidate>
+        <div class="form__group">
+          <label for="book-search" class="form__label">
+            Qual leitura você gostaria de recomendar?
+            <span class="form__required" aria-hidden="true">*</span>
+          </label>
+          <div class="search" id="search-container">
+            <input
+              type="text"
+              id="book-search"
+              class="search__input"
+              placeholder="Comece digitando o nome do livro..."
+              autocomplete="off"
+              aria-autocomplete="list"
+              aria-controls="search-results"
+              aria-expanded="false"
+              aria-describedby="search-hint"
+              required
+            >
+            <div class="search__loading" id="search-loading" hidden aria-live="polite">
+              <span class="spinner" aria-hidden="true"></span>
+              <span>Buscando livros...</span>
+            </div>
+            <ul
+              id="search-results"
+              class="search__results"
+              role="listbox"
+              hidden
+            ></ul>
+          </div>
+          <p id="search-hint" class="form__hint">Selecione um livro da lista de sugestões.</p>
+          <p id="search-error" class="form__error" role="alert" hidden></p>
+        </div>
+
+        <div id="selected-book" class="selected-book" hidden>
+          <img id="selected-cover" class="selected-book__cover" src="" alt="">
+          <div class="selected-book__info">
+            <h2 id="selected-title" class="selected-book__title"></h2>
+            <p id="selected-authors" class="selected-book__authors"></p>
+            <button type="button" id="clear-selection" class="selected-book__clear">
+              Escolher outro livro
+            </button>
+          </div>
+        </div>
+
+        <div class="form__group">
+          <label for="onde-comprar" class="form__label">
+            Onde comprar?
+            <span class="form__optional">(opcional)</span>
+          </label>
+          <input
+            type="text"
+            id="onde-comprar"
+            class="form__input"
+            placeholder="Ex.: Amazon, site da editora, Livraria Cultura..."
+          >
+        </div>
+
+        <button type="submit" id="submit-btn" class="form__submit" disabled>
+          Enviar recomendação
+        </button>
+      </form>
+
+      <div id="form-message" class="message" role="alert" hidden></div>
+    </main>
+
+    <footer class="footer">
+      <p>Delulu Literário &mdash; onde a leitura vira conversa.</p>
+    </footer>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
