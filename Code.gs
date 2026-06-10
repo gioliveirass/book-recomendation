@@ -4,6 +4,7 @@
  */
 
 const SHEET_NAME = 'Recomendações';
+const BOOK_ID_COLUMN = 5;
 // Cole o ID da planilha (parte da URL: .../spreadsheets/d/ESTE_ID/edit)
 const SPREADSHEET_ID = '1tH34di3cPsWzrnUrPlLqPOX6sFErPg-u6tOYhiv82LA';
 
@@ -12,7 +13,10 @@ function doGet(e) {
   let payload;
 
   try {
-    if (e.parameter.titulo) {
+    if (e.parameter.action === 'check') {
+      const bookId = String(e.parameter.googleBooksId || e.parameter.bookId || '').trim();
+      payload = { exists: bookId ? bookIdExists(bookId) : false };
+    } else if (e.parameter.titulo) {
       payload = processRecommendation(e.parameter);
     } else {
       payload = {
@@ -52,6 +56,19 @@ function getRequestData(e) {
   throw new Error('Nenhum dado recebido.');
 }
 
+function bookIdExists(bookId) {
+  const sheet = getOrCreateSheet();
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return false;
+
+  const ids = sheet.getRange(2, BOOK_ID_COLUMN, lastRow, BOOK_ID_COLUMN).getValues();
+  const normalized = String(bookId).trim();
+
+  return ids.some(function (row) {
+    return String(row[0]).trim() === normalized;
+  });
+}
+
 function processRecommendation(data) {
   try {
     const titulo = String(data.titulo || '').trim();
@@ -63,6 +80,14 @@ function processRecommendation(data) {
 
     if (!titulo || !bookId) {
       return { success: false, error: 'Título e ID do livro são obrigatórios.' };
+    }
+
+    if (bookIdExists(bookId)) {
+      return {
+        success: false,
+        duplicate: true,
+        error: 'Este livro já foi recomendado no clube.',
+      };
     }
 
     const sheet = getOrCreateSheet();

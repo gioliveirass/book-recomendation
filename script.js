@@ -21,39 +21,41 @@ const selectedAuthors = document.getElementById('selected-authors');
 const clearSelectionBtn = document.getElementById('clear-selection');
 const ondeComprarInput = document.getElementById('onde-comprar');
 const submitBtn = document.getElementById('submit-btn');
-const formMessage = document.getElementById('form-message');
+const toastEl = document.getElementById('toast');
 
 let selectedBook = null;
 let debounceTimer = null;
 let activeRequest = null;
 let highlightedIndex = -1;
 let isSelectingFromList = false;
-let messageTimeout = null;
-let messageFadeTimeout = null;
+let toastTimeout = null;
+let toastFadeTimeout = null;
 
-function hideMessage() {
-  if (messageTimeout) clearTimeout(messageTimeout);
-  if (messageFadeTimeout) clearTimeout(messageFadeTimeout);
-  messageTimeout = null;
-  messageFadeTimeout = null;
-  formMessage.classList.remove('message--fade-out');
-  formMessage.hidden = true;
-  formMessage.textContent = '';
-  formMessage.className = 'message';
+function hideToast() {
+  if (toastTimeout) clearTimeout(toastTimeout);
+  if (toastFadeTimeout) clearTimeout(toastFadeTimeout);
+  toastTimeout = null;
+  toastFadeTimeout = null;
+  toastEl.classList.remove('toast--visible', 'toast--fade-out', 'toast--success', 'toast--error');
+  toastEl.textContent = '';
 }
 
-function showMessage(text, type, autoHideMs = 0) {
-  if (messageTimeout) clearTimeout(messageTimeout);
-  if (messageFadeTimeout) clearTimeout(messageFadeTimeout);
-  formMessage.classList.remove('message--fade-out');
-  formMessage.hidden = false;
-  formMessage.textContent = text;
-  formMessage.className = `message message--${type}`;
+function showToast(text, type, autoHideMs = 0) {
+  if (toastTimeout) clearTimeout(toastTimeout);
+  if (toastFadeTimeout) clearTimeout(toastFadeTimeout);
+  toastEl.classList.remove('toast--fade-out', 'toast--success', 'toast--error');
+  toastEl.textContent = text;
+  toastEl.classList.add(`toast--${type}`);
+
+  requestAnimationFrame(() => {
+    toastEl.classList.add('toast--visible');
+  });
 
   if (autoHideMs > 0) {
-    messageTimeout = setTimeout(() => {
-      formMessage.classList.add('message--fade-out');
-      messageFadeTimeout = setTimeout(hideMessage, 400);
+    toastTimeout = setTimeout(() => {
+      toastEl.classList.remove('toast--visible');
+      toastEl.classList.add('toast--fade-out');
+      toastFadeTimeout = setTimeout(hideToast, 400);
     }, autoHideMs);
   }
 }
@@ -273,11 +275,11 @@ function selectBook(book) {
   submitBtn.disabled = false;
 }
 
-function clearSelection() {
+function clearSelection({ focus = true } = {}) {
   selectedBook = null;
   searchInput.value = '';
   searchInput.disabled = false;
-  searchInput.focus();
+  if (focus) searchInput.focus();
   selectedBookEl.hidden = true;
   selectedCover.src = '';
   selectedCover.style.display = '';
@@ -332,88 +334,63 @@ function formatDateBR() {
   return `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
 }
 
-function submitViaGetBeacon(payload) {
-  return new Promise((resolve) => {
-    const params = new URLSearchParams(payload);
-    const img = new Image();
-    const done = () => resolve({ success: true });
+function apiRequest(params) {
+  return new Promise((resolve, reject) => {
+    const callbackName = `deluluCb_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const query = new URLSearchParams({ ...params, callback: callbackName });
+    let script = null;
 
-    img.onload = done;
-    img.onerror = done;
-    setTimeout(done, 12000);
-    img.src = `${APPS_SCRIPT_URL}?${params.toString()}`;
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error('Tempo esgotado. Tente novamente.'));
+    }, 30000);
+
+    function cleanup() {
+      clearTimeout(timeout);
+      delete window[callbackName];
+      if (script && script.parentNode) script.remove();
+    }
+
+    window[callbackName] = (result) => {
+      cleanup();
+      resolve(result);
+    };
+
+    script = document.createElement('script');
+    script.src = `${APPS_SCRIPT_URL}?${query.toString()}`;
+    script.onerror = () => {
+      cleanup();
+      reject(new Error('Erro de conexão. Tente novamente.'));
+    };
+    document.head.appendChild(script);
   });
 }
 
-function submitViaForm(payload) {
-  return new Promise((resolve, reject) => {
-    const frameName = `delulu-frame-${Date.now()}`;
-    const iframe = document.createElement('iframe');
-    iframe.name = frameName;
-    iframe.setAttribute('aria-hidden', 'true');
-    iframe.style.cssText = 'position:absolute;width:0;height:0;border:0;visibility:hidden';
-    document.body.appendChild(iframe);
-
-    const form = document.createElement('form');
-    form.method = 'POST';
-    form.action = APPS_SCRIPT_URL;
-    form.target = frameName;
-    form.acceptCharset = 'UTF-8';
-    form.enctype = 'application/x-www-form-urlencoded';
-    form.style.display = 'none';
-
-    Object.entries(payload).forEach(([key, value]) => {
-      const input = document.createElement('input');
-      input.type = 'hidden';
-      input.name = key;
-      input.value = value ?? '';
-      form.appendChild(input);
-    });
-
-    let settled = false;
-
-    function cleanup() {
-      iframe.onload = null;
-      iframe.remove();
-      if (form.parentNode) form.remove();
-    }
-
-    function settle(ok, error) {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      cleanup();
-      if (ok) resolve({ success: true });
-      else reject(error);
-    }
-
-    const timeout = setTimeout(() => {
-      settle(false, new Error('Tempo esgotado ao enviar. Tente novamente.'));
-    }, 30000);
-
-    let submitted = false;
-    iframe.onload = () => {
-      if (!submitted) return;
-      settle(true);
-    };
-
-    document.body.appendChild(form);
-    form.submit();
-    submitted = true;
+async function checkBookExists(bookId) {
+  const result = await apiRequest({
+    action: 'check',
+    googleBooksId: bookId,
   });
+  return Boolean(result.exists);
 }
 
 async function submitRecommendation(payload) {
-  try {
-    return await submitViaForm(payload);
-  } catch {
-    return submitViaGetBeacon(payload);
+  const result = await apiRequest(payload);
+
+  if (result.duplicate) {
+    throw new Error('Este livro já foi recomendado no clube.');
   }
+
+  if (!result.success) {
+    throw new Error(result.error || 'Erro ao salvar na planilha.');
+  }
+
+  return result;
 }
 
 async function handleSubmit(e) {
   e.preventDefault();
-  hideMessage();
+  hideToast();
 
   if (!selectedBook) {
     showSearchError('Selecione um livro da lista de sugestões.');
@@ -422,7 +399,7 @@ async function handleSubmit(e) {
   }
 
   if (APPS_SCRIPT_URL === 'COLOQUE_SUA_URL_DO_APPS_SCRIPT_AQUI') {
-    showMessage('Configure a URL do Google Apps Script no arquivo script.js antes de enviar.', 'error');
+    showToast('Configure a URL do Google Apps Script no arquivo script.js antes de enviar.', 'error', SUCCESS_MESSAGE_MS);
     return;
   }
 
@@ -439,12 +416,17 @@ async function handleSubmit(e) {
   };
 
   try {
+    const exists = await checkBookExists(payload.googleBooksId);
+    if (exists) {
+      throw new Error('Este livro já foi recomendado no clube.');
+    }
+
     await submitRecommendation(payload);
-    showMessage('Recomendação enviada com sucesso! Obrigada por compartilhar com o clube.', 'success', SUCCESS_MESSAGE_MS);
-    clearSelection();
     ondeComprarInput.value = '';
+    clearSelection({ focus: false });
+    showToast('Recomendação enviada com sucesso! Obrigada por compartilhar com o clube.', 'success', SUCCESS_MESSAGE_MS);
   } catch (err) {
-    showMessage(err.message || 'Erro ao enviar a recomendação. Tente novamente em alguns instantes.', 'error');
+    showToast(err.message || 'Erro ao enviar a recomendação. Tente novamente em alguns instantes.', 'error', SUCCESS_MESSAGE_MS);
     submitBtn.disabled = false;
   } finally {
     submitBtn.classList.remove('form__submit--loading');
@@ -477,7 +459,7 @@ searchInput.addEventListener('blur', () => {
   }, 150);
 });
 clearSelectionBtn.addEventListener('click', () => {
-  hideMessage();
+  hideToast();
   clearSelection();
 });
 form.addEventListener('submit', handleSubmit);
