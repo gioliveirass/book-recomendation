@@ -333,49 +333,83 @@ function formatDateBR() {
   return `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
 }
 
-function submitViaJsonp(payload) {
+function submitViaGetBeacon(payload) {
+  return new Promise((resolve) => {
+    const params = new URLSearchParams(payload);
+    const img = new Image();
+    const done = () => resolve({ success: true });
+
+    img.onload = done;
+    img.onerror = done;
+    setTimeout(done, 12000);
+    img.src = `${APPS_SCRIPT_URL}?${params.toString()}`;
+  });
+}
+
+function submitViaForm(payload) {
   return new Promise((resolve, reject) => {
-    const callbackName = `deluluCb_${Date.now()}`;
-    const params = new URLSearchParams({
-      titulo: payload.titulo,
-      autores: payload.autores,
-      capa: payload.capa,
-      googleBooksId: payload.googleBooksId,
-      ondeComprar: payload.ondeComprar,
-      dataEnvio: payload.dataEnvio,
-      callback: callbackName,
+    const frameName = `delulu-frame-${Date.now()}`;
+    const iframe = document.createElement('iframe');
+    iframe.name = frameName;
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.style.cssText = 'position:absolute;width:0;height:0;border:0;visibility:hidden';
+    document.body.appendChild(iframe);
+
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = APPS_SCRIPT_URL;
+    form.target = frameName;
+    form.acceptCharset = 'UTF-8';
+    form.enctype = 'application/x-www-form-urlencoded';
+    form.style.display = 'none';
+
+    Object.entries(payload).forEach(([key, value]) => {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = key;
+      input.value = value ?? '';
+      form.appendChild(input);
     });
 
-    const timeout = setTimeout(() => {
-      cleanup();
-      reject(new Error('Tempo esgotado ao enviar. Tente novamente.'));
-    }, 20000);
+    let settled = false;
 
     function cleanup() {
-      clearTimeout(timeout);
-      delete window[callbackName];
-      if (script.parentNode) {
-        script.remove();
-      }
+      iframe.onload = null;
+      iframe.remove();
+      if (form.parentNode) form.remove();
     }
 
-    window[callbackName] = (result) => {
+    function settle(ok, error) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
       cleanup();
-      if (result.success) {
-        resolve(result);
-      } else {
-        reject(new Error(result.error || 'Erro ao salvar na planilha.'));
-      }
+      if (ok) resolve({ success: true });
+      else reject(error);
+    }
+
+    const timeout = setTimeout(() => {
+      settle(false, new Error('Tempo esgotado ao enviar. Tente novamente.'));
+    }, 30000);
+
+    let submitted = false;
+    iframe.onload = () => {
+      if (!submitted) return;
+      settle(true);
     };
 
-    const script = document.createElement('script');
-    script.src = `${APPS_SCRIPT_URL}?${params.toString()}`;
-    script.onerror = () => {
-      cleanup();
-      reject(new Error('Erro de conexão ao enviar. Verifique a URL do Apps Script.'));
-    };
-    document.body.appendChild(script);
+    document.body.appendChild(form);
+    form.submit();
+    submitted = true;
   });
+}
+
+async function submitRecommendation(payload) {
+  try {
+    return await submitViaForm(payload);
+  } catch {
+    return submitViaGetBeacon(payload);
+  }
 }
 
 async function handleSubmit(e) {
@@ -406,7 +440,7 @@ async function handleSubmit(e) {
   };
 
   try {
-    await submitViaJsonp(payload);
+    await submitRecommendation(payload);
     showMessage('Recomendação enviada com sucesso! Obrigada por compartilhar com o clube.', 'success', SUCCESS_MESSAGE_MS);
     clearSelection();
     ondeComprarInput.value = '';

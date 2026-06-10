@@ -29,48 +29,56 @@ function doGet(e) {
 
 function doPost(e) {
   try {
-    const data = parseRequestData(e);
+    const data = getRequestData(e);
     return respond(processRecommendation(data));
   } catch (err) {
     return respond({ success: false, error: err.message });
   }
 }
 
-function parseRequestData(e) {
-  if (e.postData && e.postData.contents) {
-    return JSON.parse(e.postData.contents);
-  }
-
+function getRequestData(e) {
   if (e.parameter && e.parameter.titulo) {
     return e.parameter;
+  }
+
+  if (e.postData && e.postData.contents) {
+    try {
+      return JSON.parse(e.postData.contents);
+    } catch (parseErr) {
+      throw new Error('Formato de dados inválido.');
+    }
   }
 
   throw new Error('Nenhum dado recebido.');
 }
 
 function processRecommendation(data) {
-  const titulo = String(data.titulo || '').trim();
-  const autores = String(data.autores || '').trim();
-  const capa = String(data.capa || '').trim();
-  const bookId = String(data.googleBooksId || data.bookId || '').trim();
-  const ondeComprar = String(data.ondeComprar || '').trim();
-  const dataEnvio = String(data.dataEnvio || '').trim() || formatDateNow();
+  try {
+    const titulo = String(data.titulo || '').trim();
+    const autores = String(data.autores || '').trim();
+    const capa = String(data.capa || '').trim();
+    const bookId = String(data.googleBooksId || data.bookId || '').trim();
+    const ondeComprar = String(data.ondeComprar || '').trim();
+    const dataEnvio = String(data.dataEnvio || '').trim() || formatDateNow();
 
-  if (!titulo || !bookId) {
-    return { success: false, error: 'Título e ID do livro são obrigatórios.' };
+    if (!titulo || !bookId) {
+      return { success: false, error: 'Título e ID do livro são obrigatórios.' };
+    }
+
+    const sheet = getOrCreateSheet();
+    sheet.appendRow([
+      dataEnvio,
+      titulo,
+      autores,
+      capa,
+      bookId,
+      ondeComprar,
+    ]);
+
+    return { success: true, message: 'Recomendação salva com sucesso.' };
+  } catch (err) {
+    return { success: false, error: err.message };
   }
-
-  const sheet = getOrCreateSheet();
-  sheet.appendRow([
-    dataEnvio,
-    titulo,
-    autores,
-    capa,
-    bookId,
-    ondeComprar,
-  ]);
-
-  return { success: true, message: 'Recomendação salva com sucesso.' };
 }
 
 function getSpreadsheet() {
