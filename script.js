@@ -1,9 +1,11 @@
 // Substitua pela URL do seu Web App do Google Apps Script após o deploy
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzolyC9hm5nJ9yeCpXG3D8liTltlA1lrgFh3bkXba3F0z6qm4DEJV6Y7uHv9WwqjUy6/exec';
 
-const DEBOUNCE_MS = 300;
+const DEBOUNCE_MS = 500;
 const MIN_SEARCH_LENGTH = 2;
-const BOOKS_API = 'https://www.googleapis.com/books/v1/volumes';
+const OPEN_LIBRARY_API = 'https://openlibrary.org/search.json';
+
+const searchCache = new Map();
 
 const form = document.getElementById('recommendation-form');
 const searchInput = document.getElementById('book-search');
@@ -64,17 +66,46 @@ function openResults() {
   searchInput.setAttribute('aria-expanded', 'true');
 }
 
-function parseBook(item) {
-  const info = item.volumeInfo || {};
-  const authors = Array.isArray(info.authors) ? info.authors.join(', ') : 'Autor desconhecido';
-  const cover = info.imageLinks?.thumbnail || info.imageLinks?.smallThumbnail || '';
+function parseBook(doc) {
+  const authors = Array.isArray(doc.author_name) ? doc.author_name.join(', ') : 'Autor desconhecido';
+  const cover = doc.cover_i ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg` : '';
+  const key = doc.key || doc.cover_edition_key || '';
 
   return {
-    titulo: info.title || 'Sem título',
+    titulo: doc.title || 'Sem título',
     autores: authors,
-    capa: cover.replace('http://', 'https://'),
-    googleBooksId: item.id,
+    capa: cover,
+    googleBooksId: key ? `openlibrary:${key.replace(/^\//, '')}` : `openlibrary:${doc.title}`,
   };
+}
+
+function getCachedBooks(query) {
+  const cached = searchCache.get(query.toLowerCase());
+  if (!cached) return null;
+  if (Date.now() - cached.at > 30 * 60 * 1000) {
+    searchCache.delete(query.toLowerCase());
+    return null;
+  }
+  return cached.books;
+}
+
+function setCachedBooks(query, books) {
+  searchCache.set(query.toLowerCase(), { books, at: Date.now() });
+}
+
+async function fetchBooks(query, signal) {
+  const url = new URL(OPEN_LIBRARY_API);
+  url.searchParams.set('q', query);
+  url.searchParams.set('limit', '10');
+  url.searchParams.set('language', 'por');
+
+  const response = await fetch(url, { signal });
+  if (!response.ok) {
+    throw new Error('OPEN_LIBRARY_ERROR');
+  }
+
+  const data = await response.json();
+  return (data.docs || []).map(parseBook);
 }
 
 function createCoverElement(src, alt, className) {
@@ -160,21 +191,22 @@ async function searchBooks(query) {
   setLoading(true);
   hideSearchError();
 
+  const cached = getCachedBooks(query);
+  if (cached) {
+    renderResults(cached);
+    setLoading(false);
+    activeRequest = null;
+    return;
+  }
+
   try {
-    const url = `${BOOKS_API}?q=${encodeURIComponent(query)}&maxResults=10&langRestrict=pt`;
-    const response = await fetch(url, { signal: controller.signal });
-
-    if (!response.ok) {
-      throw new Error('Erro ao buscar livros. Tente novamente.');
-    }
-
-    const data = await response.json();
-    const books = (data.items || []).map(parseBook);
+    const books = await fetchBooks(query, controller.signal);
+    setCachedBooks(query, books);
     renderResults(books);
   } catch (err) {
     if (err.name === 'AbortError') return;
     closeResults();
-    showSearchError('Não foi possível buscar livros. Verifique sua conexão.');
+    showSearchError('Não foi possível buscar livros agora. Tente novamente em alguns minutos.');
   } finally {
     if (activeRequest === controller) {
       activeRequest = null;
@@ -329,6 +361,19 @@ async function handleSubmit(e) {
     submitBtn.classList.remove('form__submit--loading');
   }
 }
+
+function initSearchUI() {
+  setLoading(false);
+  closeResults();
+  hideSearchError();
+  selectedBookEl.hidden = true;
+  selectedCover.src = '';
+  selectedTitle.textContent = '';
+  selectedAuthors.textContent = '';
+  submitBtn.disabled = true;
+}
+
+initSearchUI();
 
 searchInput.addEventListener('input', handleSearchInput);
 searchInput.addEventListener('keydown', handleSearchKeydown);
