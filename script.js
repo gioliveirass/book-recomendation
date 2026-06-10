@@ -334,58 +334,82 @@ function formatDateBR() {
   return `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
 }
 
-function apiRequest(params) {
+function submitViaForm(payload, method) {
   return new Promise((resolve, reject) => {
-    const callbackName = `deluluCb_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const query = new URLSearchParams({ ...params, callback: callbackName });
-    let script = null;
+    const frameName = `delulu-frame-${Date.now()}`;
+    const iframe = document.createElement('iframe');
+    iframe.name = frameName;
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.style.cssText = 'position:absolute;width:0;height:0;border:0;visibility:hidden';
+    document.body.appendChild(iframe);
 
-    const timeout = setTimeout(() => {
-      cleanup();
-      reject(new Error('Tempo esgotado. Tente novamente.'));
-    }, 30000);
+    const form = document.createElement('form');
+    form.method = method;
+    form.action = APPS_SCRIPT_URL;
+    form.target = frameName;
+    form.acceptCharset = 'UTF-8';
+    form.style.display = 'none';
 
-    function cleanup() {
-      clearTimeout(timeout);
-      delete window[callbackName];
-      if (script && script.parentNode) script.remove();
+    if (method === 'POST') {
+      form.enctype = 'application/x-www-form-urlencoded';
     }
 
-    window[callbackName] = (result) => {
-      cleanup();
-      resolve(result);
-    };
+    Object.entries(payload).forEach(([key, value]) => {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = key;
+      input.value = value ?? '';
+      form.appendChild(input);
+    });
 
-    script = document.createElement('script');
-    script.src = `${APPS_SCRIPT_URL}?${query.toString()}`;
-    script.onerror = () => {
-      cleanup();
-      reject(new Error('Erro de conexão. Tente novamente.'));
-    };
-    document.head.appendChild(script);
-  });
-}
+    let settled = false;
 
-async function checkBookExists(bookId) {
-  const result = await apiRequest({
-    action: 'check',
-    googleBooksId: bookId,
+    function cleanup() {
+      window.removeEventListener('message', onMessage);
+      iframe.remove();
+      if (form.parentNode) form.remove();
+    }
+
+    function settle(ok, resultOrError) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      cleanup();
+      if (ok) resolve(resultOrError);
+      else reject(resultOrError);
+    }
+
+    function onMessage(event) {
+      if (!event.data || event.data.source !== 'delulu-literario') return;
+      const result = event.data.payload;
+      if (result.duplicate) {
+        settle(false, new Error('Este livro já foi recomendado no clube.'));
+        return;
+      }
+      if (!result.success) {
+        settle(false, new Error(result.error || 'Erro ao salvar na planilha.'));
+        return;
+      }
+      settle(true, result);
+    }
+
+    const timeout = setTimeout(() => {
+      settle(false, new Error('Tempo esgotado. Verifique se o Apps Script foi republicado.'));
+    }, 30000);
+
+    window.addEventListener('message', onMessage);
+    document.body.appendChild(form);
+    form.submit();
   });
-  return Boolean(result.exists);
 }
 
 async function submitRecommendation(payload) {
-  const result = await apiRequest(payload);
-
-  if (result.duplicate) {
-    throw new Error('Este livro já foi recomendado no clube.');
+  try {
+    return await submitViaForm(payload, 'POST');
+  } catch (postErr) {
+    const { capa, ...payloadWithoutCover } = payload;
+    return submitViaForm({ ...payloadWithoutCover, capa: '' }, 'GET');
   }
-
-  if (!result.success) {
-    throw new Error(result.error || 'Erro ao salvar na planilha.');
-  }
-
-  return result;
 }
 
 async function handleSubmit(e) {
@@ -416,11 +440,6 @@ async function handleSubmit(e) {
   };
 
   try {
-    const exists = await checkBookExists(payload.googleBooksId);
-    if (exists) {
-      throw new Error('Este livro já foi recomendado no clube.');
-    }
-
     await submitRecommendation(payload);
     ondeComprarInput.value = '';
     clearSelection({ focus: false });

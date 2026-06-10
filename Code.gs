@@ -18,6 +18,9 @@ function doGet(e) {
       payload = { exists: bookId ? bookIdExists(bookId) : false };
     } else if (e.parameter.titulo) {
       payload = processRecommendation(e.parameter);
+      if (!callback) {
+        return respondViaPostMessage(payload);
+      }
     } else {
       payload = {
         status: 'ok',
@@ -34,9 +37,9 @@ function doGet(e) {
 function doPost(e) {
   try {
     const data = getRequestData(e);
-    return respond(processRecommendation(data));
+    return respondViaPostMessage(processRecommendation(data));
   } catch (err) {
-    return respond({ success: false, error: err.message });
+    return respondViaPostMessage({ success: false, error: err.message });
   }
 }
 
@@ -152,4 +155,23 @@ function respond(payload, callback) {
   return ContentService
     .createTextOutput(json)
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+function respondViaPostMessage(payload) {
+  const json = JSON.stringify(payload)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026');
+  const html = [
+    '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body><script>',
+    'try {',
+    '  window.parent.postMessage({ source: "delulu-literario", payload: ',
+    json,
+    ' }, "*");',
+    '} catch (e) {}',
+    '</script></body></html>',
+  ].join('');
+
+  return HtmlService.createHtmlOutput(html)
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
