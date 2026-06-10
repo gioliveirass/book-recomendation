@@ -405,6 +405,12 @@ body {
   border-radius: var(--radius-sm);
   font-size: 0.9rem;
   line-height: 1.5;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.message--fade-out {
+  opacity: 0;
+  transform: translateY(-6px);
 }
 
 .message--success {

@@ -3,6 +3,7 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxtP11kaOMEovJh
 
 const DEBOUNCE_MS = 500;
 const MIN_SEARCH_LENGTH = 2;
+const SUCCESS_MESSAGE_MS = 5000;
 const OPEN_LIBRARY_API = 'https://openlibrary.org/search.json';
 
 const searchCache = new Map();
@@ -27,17 +28,34 @@ let debounceTimer = null;
 let activeRequest = null;
 let highlightedIndex = -1;
 let isSelectingFromList = false;
+let messageTimeout = null;
+let messageFadeTimeout = null;
 
 function hideMessage() {
+  if (messageTimeout) clearTimeout(messageTimeout);
+  if (messageFadeTimeout) clearTimeout(messageFadeTimeout);
+  messageTimeout = null;
+  messageFadeTimeout = null;
+  formMessage.classList.remove('message--fade-out');
   formMessage.hidden = true;
   formMessage.textContent = '';
   formMessage.className = 'message';
 }
 
-function showMessage(text, type) {
+function showMessage(text, type, autoHideMs = 0) {
+  if (messageTimeout) clearTimeout(messageTimeout);
+  if (messageFadeTimeout) clearTimeout(messageFadeTimeout);
+  formMessage.classList.remove('message--fade-out');
   formMessage.hidden = false;
   formMessage.textContent = text;
   formMessage.className = `message message--${type}`;
+
+  if (autoHideMs > 0) {
+    messageTimeout = setTimeout(() => {
+      formMessage.classList.add('message--fade-out');
+      messageFadeTimeout = setTimeout(hideMessage, 400);
+    }, autoHideMs);
+  }
 }
 
 function showSearchError(text) {
@@ -389,7 +407,7 @@ async function handleSubmit(e) {
 
   try {
     await submitViaJsonp(payload);
-    showMessage('Recomendação enviada com sucesso! Obrigada por compartilhar com o clube.', 'success');
+    showMessage('Recomendação enviada com sucesso! Obrigada por compartilhar com o clube.', 'success', SUCCESS_MESSAGE_MS);
     clearSelection();
     ondeComprarInput.value = '';
   } catch (err) {
