@@ -315,6 +315,51 @@ function formatDateBR() {
   return `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
 }
 
+function submitViaJsonp(payload) {
+  return new Promise((resolve, reject) => {
+    const callbackName = `deluluCb_${Date.now()}`;
+    const params = new URLSearchParams({
+      titulo: payload.titulo,
+      autores: payload.autores,
+      capa: payload.capa,
+      googleBooksId: payload.googleBooksId,
+      ondeComprar: payload.ondeComprar,
+      dataEnvio: payload.dataEnvio,
+      callback: callbackName,
+    });
+
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error('Tempo esgotado ao enviar. Tente novamente.'));
+    }, 20000);
+
+    function cleanup() {
+      clearTimeout(timeout);
+      delete window[callbackName];
+      if (script.parentNode) {
+        script.remove();
+      }
+    }
+
+    window[callbackName] = (result) => {
+      cleanup();
+      if (result.success) {
+        resolve(result);
+      } else {
+        reject(new Error(result.error || 'Erro ao salvar na planilha.'));
+      }
+    };
+
+    const script = document.createElement('script');
+    script.src = `${APPS_SCRIPT_URL}?${params.toString()}`;
+    script.onerror = () => {
+      cleanup();
+      reject(new Error('Erro de conexão ao enviar. Verifique a URL do Apps Script.'));
+    };
+    document.body.appendChild(script);
+  });
+}
+
 async function handleSubmit(e) {
   e.preventDefault();
   hideMessage();
@@ -343,30 +388,12 @@ async function handleSubmit(e) {
   };
 
   try {
-    const params = new URLSearchParams({
-      titulo: payload.titulo,
-      autores: payload.autores,
-      capa: payload.capa,
-      googleBooksId: payload.googleBooksId,
-      ondeComprar: payload.ondeComprar,
-      dataEnvio: payload.dataEnvio,
-    });
-
-    const response = await fetch(`${APPS_SCRIPT_URL}?${params.toString()}`);
-    const result = await response.json();
-
-    if (!result.success) {
-      throw new Error(result.error || 'Erro ao salvar na planilha.');
-    }
-
+    await submitViaJsonp(payload);
     showMessage('Recomendação enviada com sucesso! Obrigada por compartilhar com o clube.', 'success');
     clearSelection();
     ondeComprarInput.value = '';
   } catch (err) {
-    const message = err.message === 'Failed to fetch'
-      ? 'Erro de conexão. Verifique a URL do Apps Script e tente novamente.'
-      : (err.message || 'Erro ao enviar a recomendação. Tente novamente em alguns instantes.');
-    showMessage(message, 'error');
+    showMessage(err.message || 'Erro ao enviar a recomendação. Tente novamente em alguns instantes.', 'error');
     submitBtn.disabled = false;
   } finally {
     submitBtn.classList.remove('form__submit--loading');

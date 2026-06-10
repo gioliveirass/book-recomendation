@@ -4,26 +4,35 @@
  */
 
 const SHEET_NAME = 'Recomendações';
+// Cole o ID da planilha (parte da URL: .../spreadsheets/d/ESTE_ID/edit)
+const SPREADSHEET_ID = '1tH34di3cPsWzrnUrPlLqPOX6sFErPg-u6tOYhiv82LA';
 
 function doGet(e) {
-  if (e.parameter.titulo) {
-    return saveRecommendation(e.parameter);
+  const callback = e.parameter.callback;
+  let payload;
+
+  try {
+    if (e.parameter.titulo) {
+      payload = processRecommendation(e.parameter);
+    } else {
+      payload = {
+        status: 'ok',
+        message: 'API do Delulu Literário está funcionando.',
+      };
+    }
+  } catch (err) {
+    payload = { success: false, error: err.message };
   }
 
-  return ContentService
-    .createTextOutput(JSON.stringify({
-      status: 'ok',
-      message: 'API do Delulu Literário está funcionando.',
-    }))
-    .setMimeType(ContentService.MimeType.JSON);
+  return respond(payload, callback);
 }
 
 function doPost(e) {
   try {
     const data = parseRequestData(e);
-    return saveRecommendation(data);
+    return respond(processRecommendation(data));
   } catch (err) {
-    return jsonResponse({ success: false, error: err.message });
+    return respond({ success: false, error: err.message });
   }
 }
 
@@ -39,7 +48,7 @@ function parseRequestData(e) {
   throw new Error('Nenhum dado recebido.');
 }
 
-function saveRecommendation(data) {
+function processRecommendation(data) {
   const titulo = String(data.titulo || '').trim();
   const autores = String(data.autores || '').trim();
   const capa = String(data.capa || '').trim();
@@ -48,7 +57,7 @@ function saveRecommendation(data) {
   const dataEnvio = String(data.dataEnvio || '').trim() || formatDateNow();
 
   if (!titulo || !bookId) {
-    return jsonResponse({ success: false, error: 'Título e ID do livro são obrigatórios.' });
+    return { success: false, error: 'Título e ID do livro são obrigatórios.' };
   }
 
   const sheet = getOrCreateSheet();
@@ -61,11 +70,18 @@ function saveRecommendation(data) {
     ondeComprar,
   ]);
 
-  return jsonResponse({ success: true, message: 'Recomendação salva com sucesso.' });
+  return { success: true, message: 'Recomendação salva com sucesso.' };
+}
+
+function getSpreadsheet() {
+  const active = SpreadsheetApp.getActiveSpreadsheet();
+  if (active) return active;
+  if (SPREADSHEET_ID) return SpreadsheetApp.openById(SPREADSHEET_ID);
+  throw new Error('Planilha não encontrada. Cole o SPREADSHEET_ID no Code.gs.');
 }
 
 function getOrCreateSheet() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = getSpreadsheet();
   let sheet = ss.getSheetByName(SHEET_NAME);
 
   if (!sheet) {
@@ -90,8 +106,17 @@ function formatDateNow() {
   return Utilities.formatDate(now, Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm');
 }
 
-function jsonResponse(payload) {
+function respond(payload, callback) {
+  const json = JSON.stringify(payload);
+  const safeCallback = callback ? String(callback).replace(/[^\w$]/g, '') : '';
+
+  if (safeCallback) {
+    return ContentService
+      .createTextOutput(`${safeCallback}(${json});`)
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
+
   return ContentService
-    .createTextOutput(JSON.stringify(payload))
+    .createTextOutput(json)
     .setMimeType(ContentService.MimeType.JSON);
 }
