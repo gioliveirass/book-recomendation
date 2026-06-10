@@ -415,7 +415,7 @@ async function handleSubmit(e) {
     return;
   }
 
-  if (APPS_SCRIPT_URL === 'https://script.google.com/macros/s/AKfycbxtP11kaOMEovJhB-6NTSCwDi10dp_iF8boZ307BKcJuLx62LD6NBXMmNMFP2KCRCLR/exec') {
+  if (APPS_SCRIPT_URL === 'COLOQUE_SUA_URL_DO_APPS_SCRIPT_AQUI') {
     showToast('Configure a URL do Google Apps Script no arquivo script.js antes de enviar.', 'error', SUCCESS_MESSAGE_MS);
     return;
   }
@@ -466,7 +466,7 @@ searchInput.addEventListener('blur', () => {
     if (searchInput.value.trim()) {
       searchInput.value = '';
       closeResults();
-      showSearchError('Selecione um livro da lista — não é possível digitar manualmente.');
+      showSearchError('Selecione um livro da lista / Realize a busca pelo livro.');
     }
   }, 150);
 });
