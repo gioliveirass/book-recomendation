@@ -17,6 +17,7 @@ function doGet(e) {
       const bookId = String(e.parameter.googleBooksId || e.parameter.bookId || '').trim();
       payload = { exists: bookId ? bookIdExists(bookId) : false };
     } else if (e.parameter.titulo) {
+      Logger.log('Salvando: ' + e.parameter.titulo);
       payload = processRecommendation(e.parameter);
       if (!callback) {
         return respondViaPostMessage(payload);

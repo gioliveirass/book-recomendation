@@ -334,82 +334,75 @@ function formatDateBR() {
   return `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
 }
 
-function submitViaForm(payload, method) {
+function jsonpRequest(params) {
   return new Promise((resolve, reject) => {
-    const frameName = `delulu-frame-${Date.now()}`;
-    const iframe = document.createElement('iframe');
-    iframe.name = frameName;
-    iframe.setAttribute('aria-hidden', 'true');
-    iframe.style.cssText = 'position:absolute;width:0;height:0;border:0;visibility:hidden';
-    document.body.appendChild(iframe);
-
-    const form = document.createElement('form');
-    form.method = method;
-    form.action = APPS_SCRIPT_URL;
-    form.target = frameName;
-    form.acceptCharset = 'UTF-8';
-    form.style.display = 'none';
-
-    if (method === 'POST') {
-      form.enctype = 'application/x-www-form-urlencoded';
-    }
-
-    Object.entries(payload).forEach(([key, value]) => {
-      const input = document.createElement('input');
-      input.type = 'hidden';
-      input.name = key;
-      input.value = value ?? '';
-      form.appendChild(input);
-    });
-
+    const callbackName = `deluluCb_${Date.now()}`;
+    const query = new URLSearchParams({ ...params, callback: callbackName });
+    let script = null;
     let settled = false;
 
-    function cleanup() {
-      window.removeEventListener('message', onMessage);
-      iframe.remove();
-      if (form.parentNode) form.remove();
-    }
-
-    function settle(ok, resultOrError) {
+    function finish(fn, value) {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
-      cleanup();
-      if (ok) resolve(resultOrError);
-      else reject(resultOrError);
+      delete window[callbackName];
+      if (script && script.parentNode) script.remove();
+      fn(value);
     }
 
-    function onMessage(event) {
-      if (!event.data || event.data.source !== 'delulu-literario') return;
-      const result = event.data.payload;
-      if (result.duplicate) {
-        settle(false, new Error('Este livro já foi recomendado no clube.'));
-        return;
-      }
-      if (!result.success) {
-        settle(false, new Error(result.error || 'Erro ao salvar na planilha.'));
-        return;
-      }
-      settle(true, result);
-    }
+    window[callbackName] = (result) => finish(resolve, result);
 
     const timeout = setTimeout(() => {
-      settle(false, new Error('Tempo esgotado. Verifique se o Apps Script foi republicado.'));
-    }, 30000);
+      finish(reject, new Error('Servidor demorou para responder. Tente novamente.'));
+    }, 35000);
 
-    window.addEventListener('message', onMessage);
-    document.body.appendChild(form);
-    form.submit();
+    script = document.createElement('script');
+    script.src = `${APPS_SCRIPT_URL}?${query.toString()}`;
+    script.onerror = () => {
+      finish(reject, new Error('Não foi possível conectar ao servidor.'));
+    };
+    document.body.appendChild(script);
+  });
+}
+
+async function checkDuplicate(bookId) {
+  const result = await jsonpRequest({
+    action: 'check',
+    googleBooksId: bookId,
+  });
+  return Boolean(result.exists);
+}
+
+function saveViaGet(payload) {
+  return new Promise((resolve) => {
+    const params = new URLSearchParams(payload);
+    const img = new Image();
+    let done = false;
+
+    function finish() {
+      if (done) return;
+      done = true;
+      resolve({ success: true });
+    }
+
+    img.onload = finish;
+    img.onerror = finish;
+    setTimeout(finish, 12000);
+    img.src = `${APPS_SCRIPT_URL}?${params.toString()}`;
   });
 }
 
 async function submitRecommendation(payload) {
   try {
-    return await submitViaForm(payload, 'POST');
-  } catch (postErr) {
-    const { capa, ...payloadWithoutCover } = payload;
-    return submitViaForm({ ...payloadWithoutCover, capa: '' }, 'GET');
+    if (await checkDuplicate(payload.googleBooksId)) {
+      throw new Error('Este livro já foi recomendado no clube.');
+    }
+  } catch (err) {
+    if (err.message.includes('recomendado')) throw err;
   }
+
+  await saveViaGet(payload);
+  return { success: true };
 }
 
 async function handleSubmit(e) {
