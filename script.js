@@ -1,5 +1,5 @@
 // Substitua pela URL do seu Web App do Google Apps Script após o deploy
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzolyC9hm5nJ9yeCpXG3D8liTltlA1lrgFh3bkXba3F0z6qm4DEJV6Y7uHv9WwqjUy6/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxtP11kaOMEovJhB-6NTSCwDi10dp_iF8boZ307BKcJuLx62LD6NBXMmNMFP2KCRCLR/exec';
 
 const DEBOUNCE_MS = 500;
 const MIN_SEARCH_LENGTH = 2;
