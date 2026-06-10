@@ -336,7 +336,9 @@ function formatDateBR() {
 
 function gasRequest(params) {
   return new Promise((resolve, reject) => {
+    const frameName = `delulu_frame_${Date.now()}`;
     let iframe = null;
+    let form = null;
     let settled = false;
 
     function finish(fn, value) {
@@ -344,6 +346,7 @@ function gasRequest(params) {
       settled = true;
       clearTimeout(timeout);
       window.removeEventListener('message', onMessage);
+      if (form && form.parentNode) form.remove();
       if (iframe && iframe.parentNode) iframe.remove();
       fn(value);
     }
@@ -355,15 +358,32 @@ function gasRequest(params) {
     }
 
     const timeout = setTimeout(() => {
-      finish(reject, new Error('Servidor demorou para responder. Tente novamente.'));
+      finish(reject, new Error('Não foi possível conectar ao servidor. Verifique a URL do Apps Script e tente novamente.'));
     }, 35000);
 
     window.addEventListener('message', onMessage);
 
     iframe = document.createElement('iframe');
+    iframe.name = frameName;
     iframe.style.cssText = 'position:absolute;width:0;height:0;border:0;visibility:hidden';
-    iframe.src = `${APPS_SCRIPT_URL}?${new URLSearchParams(params).toString()}`;
     document.body.appendChild(iframe);
+
+    form = document.createElement('form');
+    form.method = 'POST';
+    form.action = APPS_SCRIPT_URL;
+    form.target = frameName;
+    form.style.display = 'none';
+
+    Object.entries(params).forEach(([key, value]) => {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = key;
+      input.value = value;
+      form.appendChild(input);
+    });
+
+    document.body.appendChild(form);
+    form.submit();
   });
 }
 

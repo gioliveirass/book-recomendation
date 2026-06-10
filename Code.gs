@@ -38,6 +38,12 @@ function doGet(e) {
 function doPost(e) {
   try {
     const data = getRequestData(e);
+
+    if (data.action === 'check') {
+      const bookId = String(data.googleBooksId || data.bookId || '').trim();
+      return respondViaPostMessage({ exists: bookId ? bookIdExists(bookId) : false });
+    }
+
     return respondViaPostMessage(processRecommendation(data));
   } catch (err) {
     return respondViaPostMessage({ success: false, error: err.message });
@@ -45,7 +51,7 @@ function doPost(e) {
 }
 
 function getRequestData(e) {
-  if (e.parameter && e.parameter.titulo) {
+  if (e.parameter && (e.parameter.titulo || e.parameter.action)) {
     return e.parameter;
   }
 
@@ -166,9 +172,10 @@ function respondViaPostMessage(payload) {
   const html = [
     '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body><script>',
     'try {',
-    '  window.parent.postMessage({ source: "delulu-literario", payload: ',
+    '  var msg = { source: "delulu-literario", payload: ',
     json,
-    ' }, "*");',
+    ' };',
+    '  if (window.top) window.top.postMessage(msg, "*");',
     '} catch (e) {}',
     '</script></body></html>',
   ].join('');
