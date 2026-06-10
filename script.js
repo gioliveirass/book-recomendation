@@ -334,39 +334,41 @@ function formatDateBR() {
   return `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
 }
 
-function jsonpRequest(params) {
+function gasRequest(params) {
   return new Promise((resolve, reject) => {
-    const callbackName = `deluluCb_${Date.now()}`;
-    const query = new URLSearchParams({ ...params, callback: callbackName });
-    let script = null;
+    let iframe = null;
     let settled = false;
 
     function finish(fn, value) {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
-      delete window[callbackName];
-      if (script && script.parentNode) script.remove();
+      window.removeEventListener('message', onMessage);
+      if (iframe && iframe.parentNode) iframe.remove();
       fn(value);
     }
 
-    window[callbackName] = (result) => finish(resolve, result);
+    function onMessage(event) {
+      const data = event.data;
+      if (!data || data.source !== 'delulu-literario') return;
+      finish(resolve, data.payload);
+    }
 
     const timeout = setTimeout(() => {
       finish(reject, new Error('Servidor demorou para responder. Tente novamente.'));
     }, 35000);
 
-    script = document.createElement('script');
-    script.src = `${APPS_SCRIPT_URL}?${query.toString()}`;
-    script.onerror = () => {
-      finish(reject, new Error('Não foi possível conectar ao servidor.'));
-    };
-    document.body.appendChild(script);
+    window.addEventListener('message', onMessage);
+
+    iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:absolute;width:0;height:0;border:0;visibility:hidden';
+    iframe.src = `${APPS_SCRIPT_URL}?${new URLSearchParams(params).toString()}`;
+    document.body.appendChild(iframe);
   });
 }
 
 async function submitRecommendation(payload) {
-  const duplicateCheck = await jsonpRequest({
+  const duplicateCheck = await gasRequest({
     action: 'check',
     googleBooksId: payload.googleBooksId,
   });
@@ -375,7 +377,7 @@ async function submitRecommendation(payload) {
     throw new Error('Este livro já foi recomendado no clube.');
   }
 
-  const result = await jsonpRequest(payload);
+  const result = await gasRequest(payload);
 
   if (!result.success) {
     if (result.duplicate) {

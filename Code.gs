@@ -19,9 +19,6 @@ function doGet(e) {
     } else if (e.parameter.titulo) {
       Logger.log('Salvando: ' + e.parameter.titulo);
       payload = processRecommendation(e.parameter);
-      if (!callback) {
-        return respondViaPostMessage(payload);
-      }
     } else {
       payload = {
         status: 'ok',
@@ -32,7 +29,10 @@ function doGet(e) {
     payload = { success: false, error: err.message };
   }
 
-  return respond(payload, callback);
+  if (callback) {
+    return respond(payload, callback);
+  }
+  return respondViaPostMessage(payload);
 }
 
 function doPost(e) {
