@@ -5,7 +5,11 @@
 
 const SHEET_NAME = 'Recomendações';
 
-function doGet() {
+function doGet(e) {
+  if (e.parameter.titulo) {
+    return saveRecommendation(e.parameter);
+  }
+
   return ContentService
     .createTextOutput(JSON.stringify({
       status: 'ok',
@@ -16,33 +20,48 @@ function doGet() {
 
 function doPost(e) {
   try {
-    const data = JSON.parse(e.postData.contents);
-
-    const titulo = String(data.titulo || '').trim();
-    const autores = String(data.autores || '').trim();
-    const capa = String(data.capa || '').trim();
-    const googleBooksId = String(data.googleBooksId || '').trim();
-    const ondeComprar = String(data.ondeComprar || '').trim();
-    const dataEnvio = String(data.dataEnvio || '').trim() || formatDateNow();
-
-    if (!titulo || !googleBooksId) {
-      return jsonResponse({ success: false, error: 'Título e Google Books ID são obrigatórios.' }, 400);
-    }
-
-    const sheet = getOrCreateSheet();
-    sheet.appendRow([
-      dataEnvio,
-      titulo,
-      autores,
-      capa,
-      googleBooksId,
-      ondeComprar,
-    ]);
-
-    return jsonResponse({ success: true, message: 'Recomendação salva com sucesso.' });
+    const data = parseRequestData(e);
+    return saveRecommendation(data);
   } catch (err) {
-    return jsonResponse({ success: false, error: err.message }, 500);
+    return jsonResponse({ success: false, error: err.message });
   }
+}
+
+function parseRequestData(e) {
+  if (e.postData && e.postData.contents) {
+    return JSON.parse(e.postData.contents);
+  }
+
+  if (e.parameter && e.parameter.titulo) {
+    return e.parameter;
+  }
+
+  throw new Error('Nenhum dado recebido.');
+}
+
+function saveRecommendation(data) {
+  const titulo = String(data.titulo || '').trim();
+  const autores = String(data.autores || '').trim();
+  const capa = String(data.capa || '').trim();
+  const bookId = String(data.googleBooksId || data.bookId || '').trim();
+  const ondeComprar = String(data.ondeComprar || '').trim();
+  const dataEnvio = String(data.dataEnvio || '').trim() || formatDateNow();
+
+  if (!titulo || !bookId) {
+    return jsonResponse({ success: false, error: 'Título e ID do livro são obrigatórios.' });
+  }
+
+  const sheet = getOrCreateSheet();
+  sheet.appendRow([
+    dataEnvio,
+    titulo,
+    autores,
+    capa,
+    bookId,
+    ondeComprar,
+  ]);
+
+  return jsonResponse({ success: true, message: 'Recomendação salva com sucesso.' });
 }
 
 function getOrCreateSheet() {
@@ -56,7 +75,7 @@ function getOrCreateSheet() {
       'Título',
       'Autores',
       'Capa',
-      'Google Books ID',
+      'ID do Livro',
       'Onde Comprar',
     ]);
     sheet.getRange(1, 1, 1, 6).setFontWeight('bold');
@@ -71,12 +90,8 @@ function formatDateNow() {
   return Utilities.formatDate(now, Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm');
 }
 
-function jsonResponse(payload, statusCode) {
-  const output = ContentService
+function jsonResponse(payload) {
+  return ContentService
     .createTextOutput(JSON.stringify(payload))
     .setMimeType(ContentService.MimeType.JSON);
-
-  // Apps Script não suporta códigos HTTP customizados diretamente,
-  // mas o payload indica sucesso ou erro para integrações que leem a resposta.
-  return output;
 }

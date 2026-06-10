@@ -343,19 +343,30 @@ async function handleSubmit(e) {
   };
 
   try {
-    const response = await fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify(payload),
+    const params = new URLSearchParams({
+      titulo: payload.titulo,
+      autores: payload.autores,
+      capa: payload.capa,
+      googleBooksId: payload.googleBooksId,
+      ondeComprar: payload.ondeComprar,
+      dataEnvio: payload.dataEnvio,
     });
 
-    // no-cors não permite ler a resposta, mas o envio ocorre
+    const response = await fetch(`${APPS_SCRIPT_URL}?${params.toString()}`);
+    const result = await response.json();
+
+    if (!result.success) {
+      throw new Error(result.error || 'Erro ao salvar na planilha.');
+    }
+
     showMessage('Recomendação enviada com sucesso! Obrigada por compartilhar com o clube.', 'success');
     clearSelection();
     ondeComprarInput.value = '';
-  } catch {
-    showMessage('Erro ao enviar a recomendação. Tente novamente em alguns instantes.', 'error');
+  } catch (err) {
+    const message = err.message === 'Failed to fetch'
+      ? 'Erro de conexão. Verifique a URL do Apps Script e tente novamente.'
+      : (err.message || 'Erro ao enviar a recomendação. Tente novamente em alguns instantes.');
+    showMessage(message, 'error');
     submitBtn.disabled = false;
   } finally {
     submitBtn.classList.remove('form__submit--loading');
