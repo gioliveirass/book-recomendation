@@ -111,9 +111,9 @@ function processRecommendation(data) {
 }
 
 function getSpreadsheet() {
+  if (SPREADSHEET_ID) return SpreadsheetApp.openById(SPREADSHEET_ID);
   const active = SpreadsheetApp.getActiveSpreadsheet();
   if (active) return active;
-  if (SPREADSHEET_ID) return SpreadsheetApp.openById(SPREADSHEET_ID);
   throw new Error('Planilha não encontrada. Cole o SPREADSHEET_ID no Code.gs.');
 }
 

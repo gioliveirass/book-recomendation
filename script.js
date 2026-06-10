@@ -365,44 +365,26 @@ function jsonpRequest(params) {
   });
 }
 
-async function checkDuplicate(bookId) {
-  const result = await jsonpRequest({
-    action: 'check',
-    googleBooksId: bookId,
-  });
-  return Boolean(result.exists);
-}
-
-function saveViaGet(payload) {
-  return new Promise((resolve) => {
-    const params = new URLSearchParams(payload);
-    const img = new Image();
-    let done = false;
-
-    function finish() {
-      if (done) return;
-      done = true;
-      resolve({ success: true });
-    }
-
-    img.onload = finish;
-    img.onerror = finish;
-    setTimeout(finish, 12000);
-    img.src = `${APPS_SCRIPT_URL}?${params.toString()}`;
-  });
-}
-
 async function submitRecommendation(payload) {
-  try {
-    if (await checkDuplicate(payload.googleBooksId)) {
-      throw new Error('Este livro já foi recomendado no clube.');
-    }
-  } catch (err) {
-    if (err.message.includes('recomendado')) throw err;
+  const duplicateCheck = await jsonpRequest({
+    action: 'check',
+    googleBooksId: payload.googleBooksId,
+  });
+
+  if (duplicateCheck.exists) {
+    throw new Error('Este livro já foi recomendado no clube.');
   }
 
-  await saveViaGet(payload);
-  return { success: true };
+  const result = await jsonpRequest(payload);
+
+  if (!result.success) {
+    if (result.duplicate) {
+      throw new Error('Este livro já foi recomendado no clube.');
+    }
+    throw new Error(result.error || 'Erro ao enviar a recomendação.');
+  }
+
+  return result;
 }
 
 async function handleSubmit(e) {
