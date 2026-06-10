@@ -438,6 +438,7 @@ async function handleSubmit(e) {
     clearSelection({ focus: false });
     showToast('Recomendação enviada com sucesso! Obrigada por compartilhar com o clube.', 'success', SUCCESS_MESSAGE_MS);
   } catch (err) {
+    console.log(err);
     showToast(err.message || 'Erro ao enviar a recomendação. Tente novamente em alguns instantes.', 'error', SUCCESS_MESSAGE_MS);
     submitBtn.disabled = false;
   } finally {
